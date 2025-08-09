@@ -1,0 +1,29 @@
+{
+  "name": "Assistly Chatbot",
+  "author": {
+    "name": "Rohit Shah",
+    "email": "rohit.shah@appdirect.com"
+  },
+  "defaultLocale": "en",
+  "private": true,
+  "version": "1.1.0",
+  "frameworkVersion": "2.0",
+  "singleInstall": true,
+  "location": {
+    "support": {
+      "top_bar": {
+        "url": "assets/global.html",
+        "icon": "assets/icon.png",
+        "size": { "width": "520px", "height": "780px" }
+      },
+      "ticket_sidebar": {
+        "url": "assets/iframe.html",
+        "flexible":true,
+           "size": {
+          "height": "800px",
+          "width": "100%"
+        }
+      }
+    }
+  }
+}
