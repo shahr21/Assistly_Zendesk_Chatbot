@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Assistly Chatbot — Global (Top Bar)</title>
+  <style>
+    :root{
+      --bg:#ffffff;--fg:#0f172a;--muted:#64748b;--border:#e5e7eb;
+      --pill-bg:rgba(248,250,252,0.95);--pill-brd:#cbd5e1;
+      --hud-top:8px;--avatar-pill-w:32px;--avatar-offset-right:8px;--hud-gap:8px;
+    }
+    html[data-theme="dark"]{
+      --bg:#0b1220;--fg:#e5e7eb;--muted:#94a3b8;--border:#233044;
+      --pill-bg:rgba(15,23,42,0.92);--pill-brd:#334155;
+    }
+    html,body{margin:0;padding:0;height:100%;width:100%;box-sizing:border-box;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    *,*::before,*::after{box-sizing:inherit}
+    #content{position:relative;height:100%;width:100%;background:var(--bg);overflow:hidden;border:1px solid var(--border);box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}
+    #chat-container{position:absolute;inset:0;overflow:hidden;background:var(--bg)}
+    #chat-container>*{height:100%!important;width:100%!important;max-height:100%!important;max-width:100%!important;margin:0!important;padding:0!important;display:block!important;border:0!important;background:transparent!important;color:var(--fg)!important}
+    #chat-container iframe{height:100%!important;width:100%!important;border:0!important;display:block!important;background:transparent!important}
+
+    /* Avatar (clickable) — flush to top-right */
+    #agent-pill{position:absolute;top:var(--hud-top);right:var(--avatar-offset-right);z-index:2147483647;pointer-events:auto;display:inline-flex;padding:4px;background:var(--pill-bg);border:1px solid var(--pill-brd);border-radius:9999px;box-shadow:0 1px 2px rgba(0,0,0,.25);cursor:pointer}
+    #agent-pill .avatar{width:22px;height:22px;border-radius:50%;background:#1f2937;overflow:hidden;display:block}
+    #agent-pill .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+
+    /* Settings dropdown */
+    #settings-menu{position:absolute;top:calc(var(--hud-top) + var(--avatar-pill-w) + 8px);right:8px;z-index:2147483648;min-width:220px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(2,6,23,.18);display:none}
+    #settings-menu.open{display:block}
+    .menu-sec{padding:10px 12px;border-bottom:1px solid var(--border)}
+    .menu-sec:last-child{border-bottom:0}
+    .menu-title{font-size:12px;color:var(--muted);margin-bottom:6px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0}
+
+    /* Switch */
+    .switch{position:relative;width:40px;height:22px;background:#cbd5e1;border-radius:9999px;flex:0 0 auto}
+    .switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .18s ease}
+    .switch.on{background:#22c55e}
+    .switch.on::after{transform:translateX(18px)}
+
+    /* Theme chips */
+    .radio-group{display:flex;gap:8px}
+    .chip{padding:6px 10px;border:1px solid var(--border);border-radius:9999px;cursor:pointer;font-size:12px;user-select:none}
+    .chip.active{background:var(--pill-bg);border-color:var(--pill-brd);font-weight:600}
+  </style>
+
+  <!-- Preload audio (keep whichever files you actually have) -->
+  <link rel="preload" href="chime.mp3?v=5" as="audio" type="audio/mpeg"/>
+  <link rel="preload" href="chime.ogg?v=5" as="audio" type="audio/ogg; codecs=vorbis"/>
+  <link rel="preload" href="chime.wav?v=5" as="audio" type="audio/wav; codecs=1"/>
+
+  <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
+</head>
+<body>
+  <div id="content">
+    <!-- Avatar (opens settings) -->
+    <div id="agent-pill" title="Settings">
+      <span class="avatar" id="agent-avatar"></span>
+    </div>
+
+    <!-- Settings dropdown -->
+    <div id="settings-menu" role="menu" aria-label="Assistly settings">
+      <div class="menu-sec">
+        <div class="menu-title">Appearance</div>
+        <div class="row">
+          <span>Theme</span>
+          <div class="radio-group" id="theme-group">
+            <div class="chip" data-theme="light">Light</div>
+            <div class="chip" data-theme="dark">Dark</div>
+          </div>
+        </div>
+      </div>
+      <div class="menu-sec">
+        <div class="menu-title">Sound</div>
+        <div class="row">
+          <span>Chime on open</span>
+          <div id="sound-switch" class="switch" role="switch" aria-checked="false" tabindex="0"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat mount -->
+    <div id="chat-container"></div>
+  </div>
+
+  <script>
+    (async () => {
+      const client = ZAFClient.init();
+
+      /* ---------- Audio (auto-chime once unlocked) ---------- */
+      const VERSION = 'v=5';
+      const CANDS = [
+        { src: `chime.mp3?${VERSION}`, type:'audio/mpeg' },
+        { src: `chime.ogg?${VERSION}`, type:'audio/ogg; codecs=vorbis' },
+        { src: `chime.wav?${VERSION}`, type:'audio/wav; codecs=1' }
+      ];
+      function pickSrc(){
+        const a=document.createElement('audio');
+        for(const c of CANDS){const ok=a.canPlayType(c.type); if(ok==='probably'||ok==='maybe') return c;}
+        return CANDS[0];
+      }
+      const chosen = pickSrc();
+
+      const el = new Audio(); el.src = chosen.src; el.preload='auto'; el.volume=.35;
+      let ac=null,audioBuf=null,srcNode=null;
+      async function ensureWebAudioBuffer(){
+        if(!ac){const Ctx=window.AudioContext||window.webkitAudioContext; ac=new Ctx();}
+        if(audioBuf) return audioBuf;
+        const resp=await fetch(chosen.src,{cache:'reload'}); const arr=await resp.arrayBuffer();
+        audioBuf=await ac.decodeAudioData(arr.slice(0)); return audioBuf;
+      }
+      async function playViaWebAudio(){
+        await ensureWebAudioBuffer(); await ac.resume();
+        if(srcNode){try{srcNode.stop()}catch{}}
+        srcNode=ac.createBufferSource(); srcNode.buffer=audioBuf;
+        const g=ac.createGain(); g.gain.value=.35; srcNode.connect(g).connect(ac.destination); srcNode.start(0);
+      }
+
+      const SOUND_KEY='assistly_sound_enabled';
+      let soundEnabled=(localStorage.getItem(SOUND_KEY) ?? '1')==='1'; // default ON
+      let audioUnlocked=false, chimePending=false, chimePlayed=false;
+
+      async function unlockAudio(){
+        try{await el.play(); el.pause(); el.currentTime=0;}catch{}
+        try{const Ctx=window.AudioContext||window.webkitAudioContext; if(!ac) ac=new Ctx(); await ac.resume();}catch{}
+        audioUnlocked=true;
+      }
+      async function playOpenChime(){
+        if(!soundEnabled || chimePlayed) return;
+        if(!audioUnlocked){ chimePending=true; return; }
+        try{el.currentTime=0; await el.play();}catch{ await playViaWebAudio(); }
+        chimePlayed=true;
+      }
+      function unlockOnceByGesture(){
+        document.removeEventListener('pointerdown',unlockOnceByGesture,true);
+        document.removeEventListener('keydown',unlockOnceByGesture,true);
+        unlockAudio().then(()=>{ if(chimePending && !chimePlayed){ chimePending=false; playOpenChime(); }});
+      }
+      document.addEventListener('pointerdown',unlockOnceByGesture,true);
+      document.addEventListener('keydown',unlockOnceByGesture,true);
+      client.on('app.deactivated',()=>{ chimePlayed=false; chimePending=false; if(srcNode){try{srcNode.stop()}catch{} srcNode=null;} });
+
+      /* ---------- Avatar dropdown (theme + sound) ---------- */
+      const pill=document.getElementById('agent-pill');
+      const menu=document.getElementById('settings-menu');
+      const soundSwitch=document.getElementById('sound-switch');
+      const themeGroup=document.getElementById('theme-group');
+
+      function toggleMenu(force){
+        const open=(typeof force==='boolean')? force : !menu.classList.contains('open');
+        menu.classList.toggle('open', open);
+      }
+      pill.addEventListener('click', (e)=>{ e.stopPropagation(); toggleMenu(); });
+      document.addEventListener('click',(e)=>{ if(!menu.contains(e.target) && !pill.contains(e.target)) toggleMenu(false); });
+
+      function renderSound(){
+        soundSwitch.classList.toggle('on', soundEnabled);
+        soundSwitch.setAttribute('aria-checked', soundEnabled ? 'true':'false');
+      }
+      renderSound();
+      soundSwitch.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        soundEnabled=!soundEnabled; localStorage.setItem(SOUND_KEY, soundEnabled?'1':'0'); renderSound();
+        if(soundEnabled){ await unlockAudio(); try{el.currentTime=0; await el.play();}catch{ await playViaWebAudio(); } chimePlayed=true; }
+      });
+      soundSwitch.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); soundSwitch.click(); } });
+
+      /* ---------- Theme controls (single declaration) ---------- */
+      const THEME_KEY='assistly_theme';
+      let theme=(localStorage.getItem(THEME_KEY)==='dark')?'dark':'light';
+      function markTheme(){
+        document.documentElement.setAttribute('data-theme', theme);
+        Array.from(themeGroup.querySelectorAll('.chip')).forEach(ch => ch.classList.toggle('active', ch.dataset.theme===theme));
+      }
+      themeGroup.addEventListener('click',(e)=>{
+        const chip=e.target.closest('.chip'); if(!chip) return;
+        const next=chip.dataset.theme;
+        if(next && next!==theme){ theme=next; localStorage.setItem(THEME_KEY, theme); markTheme(); mountDevsAi(theme); }
+      });
+
+      /* ---------- App size + chime on open ---------- */
+      const WIDTH=520, HEIGHT=780;
+      client.on('app.activated',()=>{
+        client.invoke('resize',{ width: WIDTH+'px', height: HEIGHT+'px' });
+        playOpenChime();
+      });
+
+      /* ---------- Agent avatar image ---------- */
+      try{
+        const { user } = await client.request({ url:'/api/v2/users/me.json' });
+        const avatarEl=document.getElementById('agent-avatar');
+        const url=(user && user.photo && user.photo.content_url)? user.photo.content_url : null;
+        if(url){ const img=new Image(); img.alt='Agent profile photo'; img.referrerPolicy='no-referrer'; img.src=url; avatarEl.innerHTML=''; avatarEl.appendChild(img); }
+        else { avatarEl.style.background='#334155'; }
+        window.DEVSAI_USER={ id:user?.id, name:user?.name, email:user?.email, avatarUrl:url||null };
+      }catch{}
+
+      /* ---------- Mount Devs.ai INLINE + close wiring ---------- */
+      function mountDevsAi(currentTheme){
+        markTheme();
+        const mount=document.getElementById('chat-container');
+        mount.innerHTML='';
+        const old=document.getElementById('appdirect-ai-embed'); if(old) old.remove();
+
+        window.DEVSAI_CONFIG={ theme: currentTheme, inline:true, embed:true, launcher:'hidden', float:false };
+
+        const sref=document.getElementsByTagName('script')[0] || document.body;
+        const j=document.createElement('script');
+        j.async=true; j.id='appdirect-ai-embed';
+        j.dataset.key='ek-aa271dcc001f32f032ed52cd52de5186a312a1c98cb8d701';
+        j.dataset.container='chat-container';
+        j.dataset.theme=currentTheme; j.dataset.mode=currentTheme;
+        j.dataset.inline='true'; j.dataset.embed='true';
+        j.dataset.launcher='hidden'; j.dataset.overlay='false';
+        j.dataset.autoOpen='true'; j.dataset.open='true';
+        j.src='https://devs.ai/embed-static/embed.js';
+        sref.parentNode.insertBefore(j, sref);
+
+        const fit=()=>{ const elx=mount.firstElementChild; if(elx){ elx.style.height='100%'; elx.style.width='100%'; elx.style.maxHeight='100%'; elx.style.maxWidth='100%'; elx.style.margin='0'; elx.style.padding='0'; elx.style.border='0'; elx.style.display='block'; }
+          const ifr=mount.querySelector('iframe'); if(ifr){ ifr.style.height='100%'; ifr.style.width='100%'; ifr.style.border='0'; ifr.style.display='block'; } };
+        new MutationObserver(fit).observe(mount,{ childList:true, subtree:true }); fit();
+
+        wireChatCloseToPopover();
+      }
+      function wireChatCloseToPopover(){
+        const SELS=[
+          '#chat-container button[aria-label*="close" i]',
+          '#chat-container button[title*="close" i]',
+          '#chat-container .close',
+          '#chat-container .btn-close',
+          '#chat-container [data-testid*="close" i]'
+        ];
+        const tryBind=()=>{
+          for(const sel of SELS){
+            const btn=document.querySelector(sel);
+            if(btn){
+              if(!btn.dataset._assistlyBound){
+                btn.dataset._assistlyBound='1';
+                btn.addEventListener('click',()=>{
+                  client.invoke('destroy').catch(()=>{
+                    client.get('instances').then(res=>{
+                      const list=(res&&res.instances)||[];
+                      const mine=list.find(x=>x.location==='top_bar');
+                      if(mine) client.invoke('instances.destroy',{ instanceGuid: mine.instanceGuid });
+                    });
+                  });
+                },{ capture:true });
+              }
+              return true;
+            }
+          }
+          return false;
+        };
+        if(!tryBind()){
+          const mo=new MutationObserver(()=>{ if(tryBind()) mo.disconnect(); });
+          mo.observe(document.getElementById('chat-container'),{ childList:true, subtree:true });
+          setTimeout(tryBind,2000);
+        }
+      }
+
+      /* ---------- Initial mount (NO re-declare of theme/THEME_KEY) ---------- */
+      markTheme();
+      if(!localStorage.getItem('assistly_theme')){ localStorage.setItem('assistly_theme', theme); }
+      mountDevsAi(theme);
+    })();
+  </script>
+</body>
+</html>

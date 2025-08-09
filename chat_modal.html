@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DevsAI — Chat</title>
+  <style>
+    html, body { height:100%; width:100%; margin:0; padding:0; box-sizing:border-box; }
+    *, *::before, *::after { box-sizing:inherit; }
+
+    #shell {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    #titlebar {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px; font-size:14px; background:#f8fafc; border-bottom:1px solid #e5e7eb;
+    }
+    #size-controls { display:inline-flex; gap:6px; align-items:center; }
+    .seg { display:inline-flex; gap:0; border:1px solid #cbd5e1; border-radius:6px; overflow:hidden; }
+    .seg button {
+      border:0; padding:6px 10px; background:#fff; cursor:pointer; font-size:12px;
+    }
+    .seg button.active { background:#e2e8f0; font-weight:600; }
+    #content { position: relative; flex: 1; overflow: hidden; }
+
+    /* Ensure the embedded widget fills the content area */
+    #chat-container, #chat-container * {
+      height: 100%;
+      width: 100%;
+      max-width: 100%;
+      max-height: 100%;
+    }
+  </style>
+
+  <script src="https://static.zdassets.com/zendesk_app_framework_sdk/2.0/zaf_sdk.min.js"></script>
+</head>
+<body>
+  <div id="shell">
+    <div id="titlebar">
+      <div>DevsAI — Chat</div>
+      <div id="size-controls">
+        <span style="font-size:12px;color:#64748b;margin-right:6px;">Size:</span>
+        <div class="seg" role="group" aria-label="Chat size presets">
+          <button id="btn-rect" type="button" title="Large tall panel (520×780)">Rectangular</button>
+          <button id="btn-square" type="button" title="Large square panel (700×700)">Square</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="content">
+      <div id="chat-container"></div>
+    </div>
+  </div>
+
+  <!-- Devs.ai embed -->
+  <script>
+    (function (d, s) {
+      var f = d.getElementsByTagName(s)[0], j = d.createElement(s);
+      j.async = true;
+      j.id = 'appdirect-ai-embed';
+      j.dataset.key = 'ek-aa271dcc001f32f032ed52cd52de5186a312a1c98cb8d701';
+      // If Devs.ai supports targeting a container, keep this:
+      j.dataset.container = 'chat-container';
+      j.src = 'https://devs.ai/embed-static/embed.js';
+      f.parentNode.insertBefore(j, f);
+    })(document, 'script');
+
+    // If the embed ignores container sizing, force its first child to fill.
+    new MutationObserver(() => {
+      const c = document.getElementById('chat-container');
+      const el = c && c.firstElementChild;
+      if (el) { el.style.height = '100%'; el.style.width = '100%'; }
+    }).observe(document.getElementById('chat-container'), { childList: true, subtree: true });
+  </script>
+
+  <!-- Preset sizing logic -->
+  <script>
+    (function () {
+      const client = ZAFClient.init();
+
+      // Tuned presets; adjust if you prefer different dims
+      const SIZES = {
+        rectangular: { w: 520, h: 780 }, // large, tall rectangle
+        square:      { w: 700, h: 700 }  // large square
+      };
+
+      const LS_PRESET = 'devsai_modal_preset'; // per-agent preference
+      let preset = (localStorage.getItem(LS_PRESET) === 'square') ? 'square' : 'rectangular';
+
+      const btnRect = document.getElementById('btn-rect');
+      const btnSquare = document.getElementById('btn-square');
+
+      function markActive() {
+        btnRect.classList.toggle('active', preset === 'rectangular');
+        btnSquare.classList.toggle('active', preset === 'square');
+      }
+
+      async function applyPreset(name) {
+        preset = name;
+        localStorage.setItem(LS_PRESET, preset);
+        markActive();
+        const { w, h } = SIZES[preset];
+        await client.invoke('resize', { width: w + 'px', height: h + 'px' });
+      }
+
+      // Initial sizing when modal opens
+      client.on('app.activated', () => applyPreset(preset));
+
+      // Buttons
+      btnRect.addEventListener('click', () => applyPreset('rectangular'));
+      btnSquare.addEventListener('click', () => applyPreset('square'));
+
+      // Optional: keyboard shortcuts (R = rectangular, S = square)
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R') applyPreset('rectangular');
+        if (e.key === 's' || e.key === 'S') applyPreset('square');
+      });
+    })();
+  </script>
+</body>
+</html>
